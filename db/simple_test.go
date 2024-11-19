@@ -18,6 +18,11 @@ func TestSimpleDB(t *testing.T) {
 	assert.False(t, isRevoked)
 	assert.Nil(t, err)
 
+	// GetRevokedCertificateInfo -- verify noop
+	rci, err := db.GetRevokedCertificateInfo("foo")
+	assert.Nil(t, rci)
+	assert.Nil(t, err)
+
 	// StoreCertificate
 	assert.Equals(t, ErrNotImplemented, db.StoreCertificate(nil))
 

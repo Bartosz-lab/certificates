@@ -83,6 +83,10 @@ type Authority struct {
 	crlStopper chan struct{}
 	crlMutex   sync.Mutex
 
+	// OCSP vars
+	ocspCert   *x509.Certificate
+	ocspSigner *crypto.Signer
+
 	// If true, do not re-initialize
 	initOnce  bool
 	startTime time.Time
@@ -824,6 +828,11 @@ func (a *Authority) init() error {
 		if err := a.startCRLGenerator(); err != nil {
 			return err
 		}
+	}
+
+	// Initialize OCSP if it's enabled.
+	if a.config.OCSP.IsEnabled() {
+		a.initOCSP()
 	}
 
 	// JWT numeric dates are seconds.

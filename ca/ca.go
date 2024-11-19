@@ -244,6 +244,10 @@ func (ca *CA) Init(cfg *config.Config) (*CA, error) {
 	insecureMux.Get("/crl", api.CRL)
 	insecureMux.Get("/1.0/crl", api.CRL)
 
+	// Mount the OCSP to the insecure mux
+	insecureMux.Post("/ocsp", api.OCSP)
+	insecureMux.Post("/1.0/ocsp", api.OCSP)
+
 	// Add ACME api endpoints in /acme and /1.0/acme
 	dns := cfg.DNSNames[0]
 	u, err := url.Parse("https://" + cfg.Address)
@@ -381,7 +385,7 @@ func (ca *CA) Init(cfg *config.Config) (*CA, error) {
 // shouldServeInsecureServer returns whether or not the insecure
 // server should also be started. This is (currently) only the case
 // if the insecure address has been configured AND when a SCEP
-// provisioner is configured or when a CRL is configured.
+// provisioner is configured or when a CRL or OCSP are configured.
 func (ca *CA) shouldServeInsecureServer() bool {
 	switch {
 	case ca.config.InsecureAddress == "":
@@ -389,6 +393,8 @@ func (ca *CA) shouldServeInsecureServer() bool {
 	case ca.shouldServeSCEPEndpoints():
 		return true
 	case ca.config.CRL.IsEnabled():
+		return true
+	case ca.config.OCSP.IsEnabled():
 		return true
 	default:
 		return false

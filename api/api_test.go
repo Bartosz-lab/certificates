@@ -210,6 +210,7 @@ type mockAuthority struct {
 	getIntermediateCertificates  func() []*x509.Certificate
 	getFederation                func() ([]*x509.Certificate, error)
 	getCRL                       func() (*authority.CertificateRevocationListInfo, error)
+	getOCSPResponse              func(request []byte) ([]byte, error)
 	signSSH                      func(ctx context.Context, key ssh.PublicKey, opts provisioner.SignSSHOptions, signOpts ...provisioner.SignOption) (*ssh.Certificate, error)
 	signSSHAddUser               func(ctx context.Context, key ssh.PublicKey, cert *ssh.Certificate) (*ssh.Certificate, error)
 	renewSSH                     func(ctx context.Context, cert *ssh.Certificate) (*ssh.Certificate, error)
@@ -229,6 +230,14 @@ func (m *mockAuthority) GetCertificateRevocationList() (*authority.CertificateRe
 	}
 
 	return m.ret1.(*authority.CertificateRevocationListInfo), m.err
+}
+
+func (m *mockAuthority) GetOCSPResponse(request []byte) ([]byte, error) {
+	if m.getOCSPResponse != nil {
+		return m.GetOCSPResponse(request)
+	}
+
+	return m.ret1.([]byte), m.err
 }
 
 // TODO: remove once Authorize is deprecated.

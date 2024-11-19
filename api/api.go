@@ -56,6 +56,7 @@ type Authority interface {
 	GetFederation() ([]*x509.Certificate, error)
 	Version() authority.Version
 	GetCertificateRevocationList() (*authority.CertificateRevocationListInfo, error)
+	GetOCSPResponse(request []byte) ([]byte, error)
 }
 
 // mustAuthority will be replaced on unit tests.
@@ -332,6 +333,7 @@ func Route(r Router) {
 	r.MethodFunc("POST", "/rekey", Rekey)
 	r.MethodFunc("POST", "/revoke", Revoke)
 	r.MethodFunc("GET", "/crl", CRL)
+	r.MethodFunc("POST", "/ocsp", OCSP)
 	r.MethodFunc("GET", "/provisioners", Provisioners)
 	r.MethodFunc("GET", "/provisioners/{kid}/encrypted-key", ProvisionerKey)
 	r.MethodFunc("GET", "/roots", Roots)

@@ -31,6 +31,11 @@ func (s *SimpleDB) IsRevoked(string) (bool, error) {
 	return false, nil
 }
 
+// GetRevokedCertificateInfo noop
+func (s *SimpleDB) GetRevokedCertificateInfo(string) (*RevokedCertificateInfo, error) {
+	return nil, nil
+}
+
 // IsSSHRevoked noop
 func (s *SimpleDB) IsSSHRevoked(string) (bool, error) {
 	return false, nil

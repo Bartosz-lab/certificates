@@ -877,17 +877,7 @@ func (a *Authority) GetTLSCertificate() (*tls.Certificate, error) {
 		return nil, errs.Wrap(http.StatusInternalServerError, err, "authority.GetTLSCertificate")
 	}
 
-	// Generate default key.
-	priv, err := keyutil.GenerateDefaultKey()
-	if err != nil {
-		return fatal(err)
-	}
-	signer, ok := priv.(crypto.Signer)
-	if !ok {
-		return fatal(errors.New("private key is not a crypto.Signer"))
-	}
-
-	// prepare the sans: IPv6 DNS hostname representations are converted to their IP representation
+	// // prepare the sans: IPv6 DNS hostname representations are converted to their IP representation
 	sans := make([]string, len(a.config.DNSNames))
 	for i, san := range a.config.DNSNames {
 		if strings.HasPrefix(san, "[") && strings.HasSuffix(san, "]") {
@@ -898,8 +888,53 @@ func (a *Authority) GetTLSCertificate() (*tls.Certificate, error) {
 		sans[i] = san
 	}
 
+	resp, priv, _, err := a.GetCertificate(a.config.CommonName, sans, []x509.ExtKeyUsage{})
+	if err != nil {
+		return fatal(err)
+	}
+
+	// Generate PEM blocks to create tls.Certificate
+	pemBlocks := pem.EncodeToMemory(&pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: resp.Certificate.Raw,
+	})
+	for _, crt := range resp.CertificateChain {
+		pemBlocks = append(pemBlocks, pem.EncodeToMemory(&pem.Block{
+			Type:  "CERTIFICATE",
+			Bytes: crt.Raw,
+		})...)
+	}
+	keyPEM, err := pemutil.Serialize(priv)
+	if err != nil {
+		return fatal(err)
+	}
+
+	tlsCrt, err := tls.X509KeyPair(pemBlocks, pem.EncodeToMemory(keyPEM))
+	if err != nil {
+		return fatal(err)
+	}
+	// Set leaf certificate
+	tlsCrt.Leaf = resp.Certificate
+	return &tlsCrt, nil
+}
+
+func (a *Authority) GetCertificate(commonName string, sans []string, extKeyUsage []x509.ExtKeyUsage) (*casapi.CreateCertificateResponse, crypto.PrivateKey, *crypto.Signer, error) {
+	fatal := func(err error) (*casapi.CreateCertificateResponse, *crypto.PrivateKey, *crypto.Signer, error) {
+		return nil, nil, nil, errs.Wrap(http.StatusInternalServerError, err, "authority.GetCertificate")
+	}
+
+	// Generate default key.
+	priv, err := keyutil.GenerateDefaultKey()
+	if err != nil {
+		return fatal(err)
+	}
+	signer, ok := priv.(crypto.Signer)
+	if !ok {
+		return fatal(errors.New("private key is not a crypto.Signer"))
+	}
+
 	// Create initial certificate request.
-	cr, err := x509util.CreateCertificateRequest(a.config.CommonName, sans, signer)
+	cr, err := x509util.CreateCertificateRequest(commonName, sans, signer)
 	if err != nil {
 		return fatal(err)
 	}
@@ -915,6 +950,7 @@ func (a *Authority) GetTLSCertificate() (*tls.Certificate, error) {
 	certTpl := template.GetCertificate()
 	certTpl.NotBefore = now.Add(-1 * time.Minute)
 	certTpl.NotAfter = now.Add(24 * time.Hour)
+	certTpl.ExtKeyUsage = append(certTpl.ExtKeyUsage, extKeyUsage...)
 
 	// Policy and constraints require this fields to be set. At this moment they
 	// are only present in the extra extension.
@@ -948,29 +984,7 @@ func (a *Authority) GetTLSCertificate() (*tls.Certificate, error) {
 		return fatal(err)
 	}
 
-	// Generate PEM blocks to create tls.Certificate
-	pemBlocks := pem.EncodeToMemory(&pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: resp.Certificate.Raw,
-	})
-	for _, crt := range resp.CertificateChain {
-		pemBlocks = append(pemBlocks, pem.EncodeToMemory(&pem.Block{
-			Type:  "CERTIFICATE",
-			Bytes: crt.Raw,
-		})...)
-	}
-	keyPEM, err := pemutil.Serialize(priv)
-	if err != nil {
-		return fatal(err)
-	}
-
-	tlsCrt, err := tls.X509KeyPair(pemBlocks, pem.EncodeToMemory(keyPEM))
-	if err != nil {
-		return fatal(err)
-	}
-	// Set leaf certificate
-	tlsCrt.Leaf = resp.Certificate
-	return &tlsCrt, nil
+	return resp, priv, &signer, nil
 }
 
 // RFC 5280, 5.2.5

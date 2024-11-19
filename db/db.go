@@ -52,6 +52,7 @@ type Config struct {
 // AuthDB is an interface over an Authority DB client that implements a nosql.DB interface.
 type AuthDB interface {
 	IsRevoked(sn string) (bool, error)
+	GetRevokedCertificateInfo(sn string) (*RevokedCertificateInfo, error)
 	IsSSHRevoked(sn string) (bool, error)
 	Revoke(rci *RevokedCertificateInfo) error
 	RevokeSSH(rci *RevokedCertificateInfo) error
@@ -184,6 +185,24 @@ func (db *DB) IsRevoked(sn string) (bool, error) {
 
 	// This certificate has been revoked.
 	return true, nil
+}
+
+// GetRevokedCertificateInfo returns the information associated with a revoked
+// certificate. If the certificate is not revoked it will return nil.
+func (db *DB) GetRevokedCertificateInfo(sn string) (*RevokedCertificateInfo, error) {
+	b, err := db.Get(revokedCertsTable, []byte(sn))
+	if err != nil {
+		if nosql.IsErrNotFound(err) {
+			// If the certificate is not revoked then return nil.
+			return nil, nil
+		}
+		return nil, errors.Wrap(err, "database Get error")
+	}
+	var rci RevokedCertificateInfo
+	if err := json.Unmarshal(b, &rci); err != nil {
+		return nil, errors.Wrap(err, "error unmarshaling json")
+	}
+	return &rci, nil
 }
 
 // IsSSHRevoked returns whether or not a certificate with the given identifier
@@ -485,23 +504,24 @@ func (db *DB) Shutdown() error {
 
 // MockAuthDB mocks the AuthDB interface. //
 type MockAuthDB struct {
-	Err                     error
-	Ret1                    interface{}
-	MIsRevoked              func(string) (bool, error)
-	MIsSSHRevoked           func(string) (bool, error)
-	MRevoke                 func(rci *RevokedCertificateInfo) error
-	MRevokeSSH              func(rci *RevokedCertificateInfo) error
-	MGetCertificate         func(serialNumber string) (*x509.Certificate, error)
-	MGetCertificateData     func(serialNumber string) (*CertificateData, error)
-	MStoreCertificate       func(crt *x509.Certificate) error
-	MUseToken               func(id, tok string) (bool, error)
-	MIsSSHHost              func(principal string) (bool, error)
-	MStoreSSHCertificate    func(crt *ssh.Certificate) error
-	MGetSSHHostPrincipals   func() ([]string, error)
-	MShutdown               func() error
-	MGetRevokedCertificates func() (*[]RevokedCertificateInfo, error)
-	MGetCRL                 func() (*CertificateRevocationListInfo, error)
-	MStoreCRL               func(*CertificateRevocationListInfo) error
+	Err                        error
+	Ret1                       interface{}
+	MIsRevoked                 func(string) (bool, error)
+	MGetRevokedCertificateInfo func(string) (*RevokedCertificateInfo, error)
+	MIsSSHRevoked              func(string) (bool, error)
+	MRevoke                    func(rci *RevokedCertificateInfo) error
+	MRevokeSSH                 func(rci *RevokedCertificateInfo) error
+	MGetCertificate            func(serialNumber string) (*x509.Certificate, error)
+	MGetCertificateData        func(serialNumber string) (*CertificateData, error)
+	MStoreCertificate          func(crt *x509.Certificate) error
+	MUseToken                  func(id, tok string) (bool, error)
+	MIsSSHHost                 func(principal string) (bool, error)
+	MStoreSSHCertificate       func(crt *ssh.Certificate) error
+	MGetSSHHostPrincipals      func() ([]string, error)
+	MShutdown                  func() error
+	MGetRevokedCertificates    func() (*[]RevokedCertificateInfo, error)
+	MGetCRL                    func() (*CertificateRevocationListInfo, error)
+	MStoreCRL                  func(*CertificateRevocationListInfo) error
 }
 
 func (m *MockAuthDB) GetRevokedCertificates() (*[]RevokedCertificateInfo, error) {
@@ -531,6 +551,14 @@ func (m *MockAuthDB) IsRevoked(sn string) (bool, error) {
 		return m.MIsRevoked(sn)
 	}
 	return m.Ret1.(bool), m.Err
+}
+
+// GetRevokedCertificateInfo mock.
+func (m *MockAuthDB) GetRevokedCertificateInfo(sn string) (*RevokedCertificateInfo, error) {
+	if m.MGetRevokedCertificateInfo != nil {
+		return m.MGetRevokedCertificateInfo(sn)
+	}
+	return m.Ret1.(*RevokedCertificateInfo), m.Err
 }
 
 // IsSSHRevoked mock.

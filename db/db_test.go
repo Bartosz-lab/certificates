@@ -54,6 +54,55 @@ func TestIsRevoked(t *testing.T) {
 	}
 }
 
+func TestGetRevokedCertificateInfo(t *testing.T) {
+	tests := map[string]struct {
+		key string
+		db  *DB
+		rni *RevokedCertificateInfo
+		err error
+	}{
+		"nil/ErrNotFound": {
+			key: "sn",
+			db:  &DB{&MockNoSQLDB{Err: database.ErrNotFound, Ret1: nil}, true},
+		},
+		"error/db": {
+			key: "sn",
+			db:  &DB{&MockNoSQLDB{Err: errors.New("force"), Ret1: nil}, true},
+			err: errors.New("database Get error: force"),
+		},
+		"error/unmarshal": {
+			key: "sn",
+			db:  &DB{&MockNoSQLDB{Ret1: []byte("bad-json")}, true},
+			err: errors.New("error unmarshaling json"),
+		},
+		"correct response": {
+			key: "sn",
+			db:  &DB{&MockNoSQLDB{Ret1: []byte("{\"Serial\":\"sn\",\"ReasonCode\":1}")}, true},
+			rni: &RevokedCertificateInfo{
+				Serial: "sn", ReasonCode: 1,
+			},
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			rni, err := tc.db.GetRevokedCertificateInfo(tc.key)
+			if err != nil {
+				if assert.NotNil(t, tc.err) {
+					assert.HasPrefix(t, err.Error(), tc.err.Error())
+				}
+			} else {
+				assert.Nil(t, tc.err)
+				if rni != nil && tc.rni != nil {
+					assert.Fatal(t, rni.Serial == tc.rni.Serial)
+					assert.Fatal(t, rni.ReasonCode == tc.rni.ReasonCode)
+				} else {
+					assert.Fatal(t, rni == tc.rni)
+				}
+			}
+		})
+	}
+}
+
 func TestRevoke(t *testing.T) {
 	tests := map[string]struct {
 		rci *RevokedCertificateInfo

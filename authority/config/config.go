@@ -83,6 +83,7 @@ type Config struct {
 	Templates        *templates.Templates `json:"templates,omitempty"`
 	CommonName       string               `json:"commonName,omitempty"`
 	CRL              *CRLConfig           `json:"crl,omitempty"`
+	OCSP             *OCSPConfig          `json:"ocsp,omitempty"`
 	MetricsAddress   string               `json:"metricsAddress,omitempty"`
 	SkipValidation   bool                 `json:"-"`
 
@@ -138,6 +139,22 @@ func (c *CRLConfig) TickerDuration() time.Duration {
 	}
 
 	return (c.CacheDuration.Duration / 3) * 2
+}
+
+// OCSPConfig represents the configuration options for the OCSP server.
+type OCSPConfig struct {
+	Enabled    bool   `json:"enabled"`
+	CommonName string `json:"commonName,omitempty"`
+}
+
+// IsEnabled returns if the OCSP server is enabled.
+func (c *OCSPConfig) IsEnabled() bool {
+	return c != nil && c.Enabled
+}
+
+// Validate validates the OCSP configuration.
+func (c *OCSPConfig) Validate() error {
+	return nil
 }
 
 // ASN1DN contains ASN1.DN attributes that are used in Subject and Issuer
@@ -254,6 +271,9 @@ func (c *Config) Init() {
 	}
 	if c.CRL != nil && c.CRL.Enabled && c.CRL.CacheDuration == nil {
 		c.CRL.CacheDuration = DefaultCRLCacheDuration
+	}
+	if c.OCSP != nil && c.OCSP.Enabled && c.OCSP.CommonName == "" {
+		c.OCSP.CommonName = "Step OCSP Responder"
 	}
 	c.AuthorityConfig.init()
 }
@@ -374,6 +394,11 @@ func (c *Config) Validate() error {
 
 	// Validate crl config: nil is ok
 	if err := c.CRL.Validate(); err != nil {
+		return err
+	}
+
+	// Validate ocsp config: nil is ok
+	if err := c.OCSP.Validate(); err != nil {
 		return err
 	}
 
