@@ -3,7 +3,6 @@ package authority
 import (
 	"crypto"
 	"crypto/x509"
-	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -14,6 +13,7 @@ import (
 	"golang.org/x/crypto/ocsp"
 )
 
+// GetOCSPResponse returns an OCSP response for the given request.
 func (a *Authority) GetOCSPResponse(request []byte) ([]byte, error) {
 	fatal := func(err error) ([]byte, error) {
 		return nil, errs.Wrap(http.StatusInternalServerError, err, "authority.GetOCSPResponse")
@@ -24,7 +24,7 @@ func (a *Authority) GetOCSPResponse(request []byte) ([]byte, error) {
 	}
 
 	if !a.config.OCSP.IsEnabled() {
-		fatal(errors.New("OCSP server is not enabled"))
+		return fatal(errors.New("OCSP server is not enabled"))
 	}
 
 	ocspReq, err := ocsp.ParseRequest(request)
@@ -39,23 +39,25 @@ func (a *Authority) GetOCSPResponse(request []byte) ([]byte, error) {
 		ThisUpdate:   now,
 		NextUpdate:   time.Now().Add(time.Hour),
 		Certificate:  a.ocspCert,
+
+		// TODO: There should be added extension with the OCSP nonce
+		// but ocsp library not parse request extensions yet
 	}
 
 	cert, err := a.db.GetCertificate(sn)
 	if err != nil && !database.IsErrNotFound(err) {
-		fatalOCSP(err)
+		return fatalOCSP(err)
 	} else if cert == nil {
 		respTemplate.Status = ocsp.Unknown
 	} else {
 		rci, err := a.db.GetRevokedCertificateInfo(sn)
 		if err != nil {
-			fatalOCSP(err)
+			return fatalOCSP(err)
 		}
 
 		if rci != nil {
 			respTemplate.Status = ocsp.Revoked
 			respTemplate.RevocationReason = rci.ReasonCode
-			fmt.Println("reason code: ", rci.ReasonCode)
 			respTemplate.RevokedAt = rci.RevokedAt
 		} else {
 			respTemplate.Status = ocsp.Good
@@ -64,7 +66,7 @@ func (a *Authority) GetOCSPResponse(request []byte) ([]byte, error) {
 
 	respBytes, err := ocsp.CreateResponse(a.GetIntermediateCertificate(), a.ocspCert, respTemplate, *a.ocspSigner)
 	if err != nil {
-		fatalOCSP(err)
+		return fatalOCSP(err)
 	}
 
 	return respBytes, nil

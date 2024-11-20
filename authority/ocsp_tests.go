@@ -1,3 +1,0 @@
-package authority
-
-// Create tests
